@@ -10,12 +10,17 @@ class Embedding(nn.Module):
         Ld L=10 for x, L=4 for d
         x is in output https://github.com/bmild/nerf/issues/12
     """
-    def __init__(self, N_freqs):
+    def __init__(self, in_channels, N_freqs, logscale=True):
         super(Embedding, self).__init__()
         self.N_freqs = N_freqs
+        self.in_channels = in_channels
         self.funcs = [torch.sin, torch.cos]
-        self.out_channels = 3 * (len(self.funcs)*self.N_freqs + 1)
-        self.freq_bands = 2 ** torch.linspace(0, N_freqs - 1, self.N_freqs)
+        self.out_channels = in_channels*(len(self.funcs)*N_freqs+1)
+
+        if logscale:
+            self.freq_bands = 2**torch.linspace(0, N_freqs-1, N_freqs)
+        else:
+            self.freq_bands = torch.linspace(1, 2**(N_freqs-1), N_freqs)
 
     def forward(self, x):
         out = [x]
@@ -25,11 +30,12 @@ class Embedding(nn.Module):
 
         return torch.cat(out, -1)
 
+
 class NeRF(nn.Module):
     def __init__(self,
                  D=8, W=256,
                  in_channels_xyz=63, in_channels_dir=27,
-                 skips=[4]):
+                 skips=None):
         """
         D: number of layers for density (sigma) encoder
         W: number of hidden units in each layer
@@ -38,6 +44,8 @@ class NeRF(nn.Module):
         skips: add skip connection in the Dth layer
         """
         super(NeRF, self).__init__()
+        if skips is None:
+            skips = [4]
         self.D = D
         self.W = W
         self.in_channels_xyz = in_channels_xyz
@@ -70,7 +78,7 @@ class NeRF(nn.Module):
     def forward(self, x, sigma_only=False):
         """
         Encodes input (xyz+dir) to rgb+sigma (not ready to render yet).
-        For rendering this ray, please see rendering.py
+        For rendering this ray, please see render.py
 
         Inputs:
             x: (B, self.in_channels_xyz(+self.in_channels_dir))
